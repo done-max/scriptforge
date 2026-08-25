@@ -10,11 +10,12 @@ import {
   ShieldCheck,
   AlertCircle,
   Zap,
+  X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthModalOpen, signup, login, demoLogin, isLoading } = useAuth();
+  const { isAuthModalOpen, setIsAuthModalOpen, signup, login, demoLogin, isLoading } = useAuth();
 
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [username, setUsername] = useState('');
@@ -88,6 +89,15 @@ export const AuthModal: React.FC = () => {
       <div className="absolute w-[500px] h-[500px] bg-forge-ocean/15 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="relative w-full max-w-md bg-odyssey-depth/95 border border-forge-cyan/30 rounded-3xl shadow-2xl p-6 sm:p-8 backdrop-blur-2xl overflow-hidden text-paper-100">
+        {/* Close / Skip button */}
+        <button
+          onClick={() => setIsAuthModalOpen(false)}
+          className="absolute top-4 right-4 p-2 text-paper-400 hover:text-paper-100 hover:bg-odyssey-trench rounded-xl transition-colors"
+          title="Close / Continue as Guest"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         {/* Brand Header */}
         <div className="text-center space-y-2 mb-6">
           <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-forge-navy to-odyssey-abyss border border-bronze/40 flex items-center justify-center shadow-inner-glow">
@@ -261,8 +271,8 @@ export const AuthModal: React.FC = () => {
           </form>
         )}
 
-        {/* Instant Demo Shortcut */}
-        <div className="mt-5 pt-4 border-t border-forge-cyan/15 text-center">
+        {/* Instant Demo Shortcut & Guest Mode */}
+        <div className="mt-5 pt-4 border-t border-forge-cyan/15 space-y-2 text-center">
           <button
             type="button"
             onClick={handleDemoClick}
@@ -271,6 +281,14 @@ export const AuthModal: React.FC = () => {
           >
             <Zap className="w-3.5 h-3.5 text-bronze animate-pulse" />
             <span>Instant 1-Click Demo Login (@elena_vance)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAuthModalOpen(false)}
+            className="text-[11px] text-paper-400 hover:text-paper-100 font-mono underline block mx-auto pt-1"
+          >
+            Continue Exploring as Guest →
           </button>
         </div>
       </div>
