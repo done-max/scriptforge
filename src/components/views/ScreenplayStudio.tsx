@@ -12,6 +12,9 @@ import {
   BookOpen,
   Compass,
   Ship,
+  Volume2,
+  VolumeX,
+  Filter,
 } from 'lucide-react';
 import { CraftCard } from '../common/CraftCard';
 import { ScoreBadge } from '../common/ScoreBadge';
@@ -31,23 +34,79 @@ export const ScreenplayStudio: React.FC = () => {
 
   const [showAINotes, setShowAINotes] = useState(true);
   const [activeTabMobile, setActiveTabMobile] = useState<'scenes' | 'read' | 'notes'>('read');
+  const [readerTheme, setReaderTheme] = useState<'midnight' | 'parchment' | 'paper' | 'oled'>('midnight');
+  const [fontSize, setFontSize] = useState<'compact' | 'standard' | 'large'>('standard');
+  const [selectedCharacterFilter, setSelectedCharacterFilter] = useState<string>('all');
+  const [isReadingAloud, setIsReadingAloud] = useState(false);
 
   const scenes = activeScript.scenes || [];
   const currentAnnotations = activeScene?.aiAnnotations || [];
 
+  // Get distinct characters in the screenplay for filter
+  const allCharacters = Array.from(
+    new Set(scenes.flatMap((s) => s.charactersPresent || []))
+  ).filter(Boolean);
+
+  // Filtered scenes based on character appearance
+  const filteredScenes = selectedCharacterFilter === 'all'
+    ? scenes
+    : scenes.filter((s) => s.charactersPresent?.includes(selectedCharacterFilter));
+
   const getWaypointName = (sceneNum: number, totalScenes: number) => {
     const ratio = sceneNum / Math.max(1, totalScenes);
-    if (ratio <= 0.15) return { symbol: '🏛️', name: 'Waypoint I: Ithaca (The Status Quo)' };
-    if (ratio <= 0.3) return { symbol: '🌿', name: 'Waypoint II: The Lotus Eaters (The Temptation)' };
-    if (ratio <= 0.45) return { symbol: '👁️', name: 'Waypoint III: The Cyclops Cave (First Major Obstacle)' };
-    if (ratio <= 0.6) return { symbol: '💨', name: 'Waypoint IV: The Winds of Aeolus (False Victory)' };
+    if (ratio <= 0.15) return { symbol: '🏛️', name: 'Waypoint I: Ithaca (Status Quo)' };
+    if (ratio <= 0.3) return { symbol: '🌿', name: 'Waypoint II: Lotus Eaters (Temptation)' };
+    if (ratio <= 0.45) return { symbol: '👁️', name: 'Waypoint III: Cyclops Cave (Obstacle)' };
+    if (ratio <= 0.6) return { symbol: '💨', name: 'Waypoint IV: Winds of Aeolus (False Hope)' };
     if (ratio <= 0.75) return { symbol: '🔮', name: 'Waypoint V: Circe’s Isle (Metamorphosis)' };
-    if (ratio <= 0.85) return { symbol: '⚡', name: 'Waypoint VI: The Underworld (The Dark Night)' };
-    if (ratio <= 0.95) return { symbol: '🧜‍♀️', name: 'Waypoint VII: Scylla & Charybdis (The Dilemma)' };
-    return { symbol: '🏹', name: 'Waypoint VIII: The Bow of Odysseus (The Climax)' };
+    if (ratio <= 0.85) return { symbol: '⚡', name: 'Waypoint VI: The Underworld (Dark Night)' };
+    if (ratio <= 0.95) return { symbol: '🧜‍♀️', name: 'Waypoint VII: Scylla & Charybdis (Dilemma)' };
+    return { symbol: '🏹', name: 'Waypoint VIII: Bow of Odysseus (Climax)' };
   };
 
   const waypoint = getWaypointName(activeScene?.sceneNumber || 1, scenes.length);
+
+  // Web Speech API Table Read Synthesis
+  const toggleTableRead = () => {
+    if (!('speechSynthesis' in window)) {
+      alert('Speech synthesis is not supported in this browser.');
+      return;
+    }
+
+    if (isReadingAloud) {
+      window.speechSynthesis.cancel();
+      setIsReadingAloud(false);
+      return;
+    }
+
+    if (!activeScene) return;
+
+    const cleanText = sanitizeScreenplayText(activeScene.content);
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => setIsReadingAloud(false);
+    utterance.onerror = () => setIsReadingAloud(false);
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setIsReadingAloud(true);
+  };
+
+  // Theme styling definitions
+  const themeClasses = {
+    midnight: 'bg-odyssey-abyss border-forge-cyan/20 text-paper-100',
+    parchment: 'bg-[#18130B] border-[#8C6D37]/40 text-[#F5E6CC]',
+    paper: 'bg-[#FDFCFA] border-stone-300 text-[#1A1A1A]',
+    oled: 'bg-black border-white/20 text-white',
+  }[readerTheme];
+
+  const fontSizeClass = {
+    compact: 'text-[11px] leading-relaxed',
+    standard: 'text-xs leading-relaxed',
+    large: 'text-sm leading-loose',
+  }[fontSize];
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden text-paper-100">
@@ -61,7 +120,7 @@ export const ScreenplayStudio: React.FC = () => {
               : 'text-paper-400'
           }`}
         >
-          Scenes ({scenes.length})
+          Scenes ({filteredScenes.length})
         </button>
         <button
           onClick={() => setActiveTabMobile('read')}
@@ -93,25 +152,41 @@ export const ScreenplayStudio: React.FC = () => {
             activeTabMobile === 'scenes' ? 'flex' : 'hidden lg:flex'
           }`}
         >
-          {/* Header */}
-          <div className="p-4 border-b border-forge-cyan/15 bg-odyssey-void/60 flex items-center justify-between">
-            <div>
+          {/* Header & Character Filter */}
+          <div className="p-3.5 border-b border-forge-cyan/15 bg-odyssey-void/60 space-y-2.5">
+            <div className="flex items-center justify-between">
               <div className="text-[10px] font-mono text-forge-sky uppercase tracking-wider font-semibold flex items-center gap-1.5">
                 <Compass className="w-3.5 h-3.5 text-bronze-light" />
                 <span>Odyssey Waypoints</span>
               </div>
-              <h3 className="font-cinzel text-xs font-bold text-paper-100 truncate max-w-[170px]">
-                {activeScript.title}
-              </h3>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-odyssey-depth text-paper-300 border border-forge-cyan/20">
+                {filteredScenes.length} / {scenes.length} Scenes
+              </span>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-odyssey-depth text-paper-300 border border-forge-cyan/20">
-              {scenes.length} Scenes
-            </span>
+
+            {/* Character Scene Filter */}
+            {allCharacters.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-odyssey-depth/80 px-2.5 py-1.5 rounded-xl border border-forge-cyan/20">
+                <Filter className="w-3 h-3 text-forge-sky shrink-0" />
+                <select
+                  value={selectedCharacterFilter}
+                  onChange={(e) => setSelectedCharacterFilter(e.target.value)}
+                  className="bg-transparent text-[11px] font-mono text-paper-200 focus:outline-none w-full cursor-pointer"
+                >
+                  <option value="all" className="bg-odyssey-abyss text-paper-100">Filter: All Characters</option>
+                  {allCharacters.map((c) => (
+                    <option key={c} value={c} className="bg-odyssey-abyss text-paper-100">
+                      Character: {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Scene List */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {scenes.map((scene) => {
+            {filteredScenes.map((scene) => {
               const isCurrent = scene.sceneNumber === activeSceneIndex;
               const sceneWp = getWaypointName(scene.sceneNumber, scenes.length);
 
@@ -147,9 +222,9 @@ export const ScreenplayStudio: React.FC = () => {
               );
             })}
 
-            {scenes.length === 0 && (
+            {filteredScenes.length === 0 && (
               <div className="p-6 text-center text-paper-400 text-xs">
-                No scenes parsed yet. Click Upload to add a screenplay.
+                No scenes found for {selectedCharacterFilter}.
               </div>
             )}
           </div>
@@ -173,25 +248,75 @@ export const ScreenplayStudio: React.FC = () => {
           }`}
         >
           {/* Reader Top Action Bar */}
-          <div className="px-6 py-3 border-b border-forge-cyan/15 bg-odyssey-abyss/90 flex flex-wrap items-center justify-between gap-3">
+          <div className="px-4 sm:px-6 py-2.5 border-b border-forge-cyan/15 bg-odyssey-abyss/90 flex flex-wrap items-center justify-between gap-2.5">
             {/* Scene Info & Homeric Waypoint Banner */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs font-mono text-bronze-light bg-bronze/10 px-2.5 py-1 rounded-lg border border-bronze/30 font-bold">
-                <Ship className="w-3.5 h-3.5" />
-                <span>{waypoint.name}</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 text-xs font-mono text-bronze-light bg-bronze/10 px-2.5 py-1 rounded-lg border border-bronze/30 font-bold truncate max-w-[210px] sm:max-w-none">
+                <Ship className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{waypoint.name}</span>
               </div>
-              <span className="text-paper-500">|</span>
-              <span className="text-xs font-mono text-paper-300 uppercase">
-                SCENE {activeScene?.sceneNumber || 1} • Page {activeScene?.pageNumber || 1}
+              <span className="text-paper-500 hidden sm:inline">|</span>
+              <span className="text-xs font-mono text-paper-300 uppercase hidden sm:inline">
+                SCENE {activeScene?.sceneNumber || 1} • Pg {activeScene?.pageNumber || 1}
               </span>
             </div>
 
-            {/* Controls */}
-            <div className="flex items-center gap-2">
+            {/* Custom Reader Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Audio Table Read */}
+              <button
+                onClick={toggleTableRead}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  isReadingAloud
+                    ? 'bg-forge-ocean text-paper-50 border-forge-cyan shadow-glow-cyan animate-pulse'
+                    : 'bg-odyssey-depth/60 text-paper-300 border-paper-500/20 hover:border-forge-cyan/40'
+                }`}
+                title="Live Scene Voice Table Read"
+              >
+                {isReadingAloud ? <Volume2 className="w-3.5 h-3.5 text-forge-cyan" /> : <VolumeX className="w-3.5 h-3.5" />}
+                <span className="hidden md:inline">{isReadingAloud ? 'Reading...' : 'Table Read'}</span>
+              </button>
+
+              {/* Theme Switcher */}
+              <div className="flex items-center bg-odyssey-depth/80 rounded-lg p-0.5 border border-paper-500/20">
+                {(['midnight', 'parchment', 'paper', 'oled'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setReaderTheme(t)}
+                    className={`px-2 py-1 text-[10px] font-mono rounded uppercase transition-all ${
+                      readerTheme === t
+                        ? 'bg-forge-navy text-paper-50 font-bold border border-forge-cyan/30'
+                        : 'text-paper-400 hover:text-paper-200'
+                    }`}
+                    title={`${t} theme`}
+                  >
+                    {t[0].toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {/* Font Size */}
+              <div className="flex items-center bg-odyssey-depth/80 rounded-lg p-0.5 border border-paper-500/20">
+                {(['compact', 'standard', 'large'] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setFontSize(s)}
+                    className={`px-2 py-1 text-[10px] font-mono rounded uppercase transition-all ${
+                      fontSize === s
+                        ? 'bg-forge-navy text-paper-50 font-bold border border-forge-cyan/30'
+                        : 'text-paper-400 hover:text-paper-200'
+                    }`}
+                    title={`${s} font size`}
+                  >
+                    {s === 'compact' ? 'S' : s === 'standard' ? 'M' : 'L'}
+                  </button>
+                ))}
+              </div>
+
               {/* Toggle AI Notes Button */}
               <button
                 onClick={() => setShowAINotes(!showAINotes)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                   showAINotes
                     ? 'bg-bronze/20 text-bronze-light border-bronze/40'
                     : 'bg-odyssey-depth/60 text-paper-400 border-paper-500/20'
@@ -199,7 +324,7 @@ export const ScreenplayStudio: React.FC = () => {
                 title={showAINotes ? 'Hide AI Story Notes' : 'Show AI Story Notes'}
               >
                 {showAINotes ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{showAINotes ? 'AI Notes Active' : 'Clean Reading Mode'}</span>
+                <span className="hidden lg:inline">{showAINotes ? 'AI Notes' : 'Clean'}</span>
               </button>
 
               {/* Rewrite Button */}
@@ -208,10 +333,10 @@ export const ScreenplayStudio: React.FC = () => {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forge-navy/80 hover:bg-forge-ocean text-paper-50 text-xs font-semibold border border-forge-cyan/40 transition-all shadow-inner-glow"
               >
                 <PenTool className="w-3.5 h-3.5 text-bronze-light" />
-                <span>Rewrite Scene</span>
+                <span className="hidden sm:inline">Rewrite</span>
               </button>
 
-              {/* Download Fountain / TXT */}
+              {/* Download Fountain */}
               <button
                 onClick={() => downloadScreenplayText(activeScript, 'fountain')}
                 className="p-1.5 text-paper-300 hover:text-paper-100 hover:bg-odyssey-depth rounded-lg transition-colors border border-paper-500/20"
@@ -224,15 +349,15 @@ export const ScreenplayStudio: React.FC = () => {
 
           {/* Reader Paper Sheet */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
-            <div className="w-full max-w-2xl screenplay-sheet p-6 sm:p-12 rounded-2xl border border-forge-cyan/20 bg-odyssey-abyss shadow-2xl relative">
+            <div className={`w-full max-w-2xl screenplay-sheet p-6 sm:p-12 rounded-2xl border shadow-2xl relative transition-all duration-300 ${themeClasses}`}>
               {/* Homeric Watermark & Header */}
-              <div className="flex justify-between items-center text-xs font-mono text-paper-500 mb-8 border-b border-paper-500/20 pb-2">
+              <div className="flex justify-between items-center text-xs font-mono opacity-60 mb-8 border-b pb-2">
                 <span className="tracking-widest">{sanitizeScreenplayText(activeScript.title).toUpperCase()}</span>
                 <span>PAGE {activeScene?.pageNumber || 1}</span>
               </div>
 
               {/* Clean Screenplay Content Rendered in Courier Prime */}
-              <div className="space-y-4 font-screenplay">
+              <div className={`space-y-4 font-screenplay ${fontSizeClass}`}>
                 {activeScene ? (
                   sanitizeScreenplayText(activeScene.content)
                     .split('\n\n')
@@ -242,7 +367,7 @@ export const ScreenplayStudio: React.FC = () => {
 
                       if (isSlug) {
                         return (
-                          <div key={idx} className="script-slugline flex items-center justify-between group">
+                          <div key={idx} className="script-slugline flex items-center justify-between group font-bold tracking-wider">
                             <span>{trimmed}</span>
                             <span className="opacity-0 group-hover:opacity-100 text-[10px] font-sans font-normal text-bronze-light px-2 py-0.5 rounded bg-bronze/10 border border-bronze/30">
                               Scene {activeScene.sceneNumber}
@@ -257,16 +382,22 @@ export const ScreenplayStudio: React.FC = () => {
                         const charName = lines[0];
                         const paren = lines.length === 3 ? lines[1] : null;
                         const dial = lines[lines.length - 1];
+                        const isFilteredMatch = selectedCharacterFilter !== 'all' && charName.includes(selectedCharacterFilter);
 
                         return (
-                          <div key={idx} className="my-4 group relative">
-                            <div className="script-character">{charName}</div>
-                            {paren && <div className="script-parenthetical">{paren}</div>}
-                            <div className="script-dialogue relative">
+                          <div
+                            key={idx}
+                            className={`my-4 group relative transition-all ${
+                              isFilteredMatch ? 'p-2 rounded-xl bg-bronze/15 border border-bronze/40 shadow-glow-gold' : ''
+                            }`}
+                          >
+                            <div className="script-character text-center font-bold tracking-wider">{charName}</div>
+                            {paren && <div className="script-parenthetical text-center italic opacity-75">{paren}</div>}
+                            <div className="script-dialogue text-center max-w-[34ch] mx-auto relative">
                               <span>{dial}</span>
                               {showAINotes && (
                                 <span
-                                  className="inline-flex ml-2 align-middle w-4 h-4 rounded-full bg-bronze/20 border border-bronze text-bronze-light items-center justify-center text-[9px] font-bold shadow-glow-gold"
+                                  className="inline-flex ml-2 align-middle w-4 h-4 rounded-full bg-bronze/20 border border-bronze text-bronze-light items-center justify-center text-[9px] font-bold shadow-glow-gold cursor-pointer"
                                   title="Odyssey Story Subtext Note"
                                 >
                                   ✦
@@ -284,12 +415,12 @@ export const ScreenplayStudio: React.FC = () => {
                       );
                     })
                 ) : (
-                  <div className="p-8 text-center text-paper-400">No screenplay scene loaded.</div>
+                  <div className="p-8 text-center opacity-60">No screenplay scene loaded.</div>
                 )}
               </div>
 
               {/* Bottom Scene Paging Controls */}
-              <div className="mt-12 pt-4 border-t border-paper-500/20 flex items-center justify-between text-xs font-mono text-paper-400">
+              <div className="mt-12 pt-4 border-t opacity-60 flex items-center justify-between text-xs font-mono">
                 <button
                   disabled={activeSceneIndex <= 1}
                   onClick={() => setActiveSceneIndex(activeSceneIndex - 1)}
@@ -298,7 +429,7 @@ export const ScreenplayStudio: React.FC = () => {
                   <ChevronLeft className="w-4 h-4" />
                   <span>PREV SCENE</span>
                 </button>
-                <span className="text-paper-500 font-mono">
+                <span className="font-mono">
                   SCENE {activeScene?.sceneNumber || 1} OF {scenes.length}
                 </span>
                 <button
