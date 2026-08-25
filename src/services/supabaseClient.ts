@@ -1,12 +1,15 @@
 /**
  * Lightweight, zero-dependency Supabase REST Client
- * Interacts directly with Supabase Auth & PostgREST APIs
+ * Connected to live Supabase PostgreSQL & Auth
  */
 
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
+
+const DEFAULT_SUPABASE_URL = 'https://ypyhhuzslmjhekgmgzia.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_gHuV2p5memZuLN3QFDKXMQ_dAH6o4KR';
 
 const STORAGE_KEY_URL = 'scriptforge_supabase_url';
 const STORAGE_KEY_KEY = 'scriptforge_supabase_key';
@@ -20,8 +23,8 @@ export function getSupabaseConfig(): SupabaseConfig {
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
   return {
-    url: storedUrl || envUrl || '',
-    anonKey: storedKey || envKey || '',
+    url: storedUrl || envUrl || DEFAULT_SUPABASE_URL,
+    anonKey: storedKey || envKey || DEFAULT_SUPABASE_KEY,
   };
 }
 
@@ -38,7 +41,7 @@ export function isSupabaseConfigured(): boolean {
 export async function testSupabaseConnection(url: string, anonKey: string): Promise<{ success: boolean; message: string }> {
   try {
     const cleanUrl = url.trim().replace(/\/$/, '');
-    const res = await fetch(`${cleanUrl}/rest/v1/`, {
+    const res = await fetch(`${cleanUrl}/rest/v1/screenplays?select=count`, {
       method: 'GET',
       headers: {
         apikey: anonKey.trim(),
@@ -46,8 +49,8 @@ export async function testSupabaseConnection(url: string, anonKey: string): Prom
       },
     });
 
-    if (res.ok || res.status === 200 || res.status === 404) {
-      return { success: true, message: 'Successfully connected to Supabase PostgREST API!' };
+    if (res.ok || res.status === 200 || res.status === 206) {
+      return { success: true, message: 'Successfully connected to Supabase PostgreSQL database!' };
     }
     return { success: false, message: `Supabase returned status ${res.status}: ${res.statusText}` };
   } catch (err: any) {
@@ -147,7 +150,7 @@ export async function supabaseInsertScreenplay(screenplay: any, accessToken?: st
   const user = supabaseGetStoredSession()?.user;
 
   const payload = {
-    user_id: user?.id,
+    user_id: user?.id || '00000000-0000-0000-0000-000000000000',
     title: screenplay.title,
     author: screenplay.author,
     genre: screenplay.genre,
